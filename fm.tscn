@@ -1,0 +1,413 @@
+[gd_scene load_steps=16 format=3 uid="uid://cf1mmhyjd3yts"]
+
+[ext_resource type="PackedScene" uid="uid://ba42mibtvb7ao" path="res://operator.tscn" id="1_gacto"]
+
+[sub_resource type="GDScript" id="GDScript_hu4gv"]
+script/source = "extends Node
+
+const events = [
+    'c', 'cs', 'd', 'ds', 'e', 'f', 'fs', 'g', 'gs', 'a', 'as', 'b'
+]
+const notes = [
+    261.63, 277.18, 293.66, 311.13, 329.63, 349.23, 369.99, 392, 415.3, 440, 466.16, 493.88,
+]
+
+func _ready():
+    for event in events:
+        var button: Button = find_child(event)
+        button.connect(\"button_down\", func(): button_pressed(button))
+        button.connect(\"button_up\", func(): button_released(button))
+        button.connect(\"toggled\", func(v): button_pressed(button) if v else button_released(button))
+
+func _process(delta):
+    for event in events:
+        var button: Button = find_child(event)
+        button.keep_pressed_outside = true
+        if Input.is_action_just_pressed(event):
+            button.toggle_mode = true
+            button.button_pressed = true
+        elif Input.is_action_just_released(event):
+            button.button_pressed = false
+            button.toggle_mode = false
+
+func button_pressed(b):
+    $graph_edit/output.set_tone(notes[events.find(b.name)])
+
+func button_released(b):
+    $graph_edit/output.set_tone(0)
+"
+
+[sub_resource type="GDScript" id="GDScript_bux81"]
+script/source = "extends GraphEdit
+
+func _ready():
+    connect(\"connection_request\", Callable(self, \"on_connection_request\"))
+    connect(\"disconnection_request\", Callable(self, \"on_disconnection_request\"))
+    
+func on_connection_request(from, from_port, to, to_port):
+    var dest = get_node(str(to))
+    if str(to) == 'output' and dest.inputs:
+        # Output can only have one input
+        return false
+    dest.inputs.append(get_node(str(from)))
+    connect_node(from, from_port, to, to_port)
+    return true
+
+func on_disconnection_request(from, from_port, to, to_port):
+    get_node(str(to)).inputs.erase(get_node(str(from)))
+    disconnect_node(from, from_port, to, to_port)
+    return true
+"
+
+[sub_resource type="GDScript" id="GDScript_7wwkb"]
+script/source = "extends GraphNode
+
+var playback # Will hold the AudioStreamGeneratorPlayback.
+@onready var player: AudioStreamPlayer = $audio_stream_player
+@onready var sample_hz = player.stream.mix_rate
+var t = 0.0
+
+@export var inputs: Array[Node] = []
+@export var tone: float = 0.0
+
+var history = []
+
+func _ready():
+    player.play()
+    playback = player.get_stream_playback()
+    #fill_buffer()
+
+func _process(delta: float) -> void:
+    var frames_available = playback.get_frames_available()
+    for i in range(frames_available):
+        var sample = Vector2.ZERO
+        for input in inputs:
+            sample = input.read(t, tone)
+        playback.push_frame(sample)
+        if len(history) >= size.x:
+            history.pop_front()
+        history.append(sample.x)
+        t += 1.0 / sample_hz
+
+    #history.clear()
+    #for i in range(size.x):
+        #var at = float(i) / 11025
+        #var sample = Vector2.ZERO
+        #if input:
+            #sample = input.read(at)
+        #history.append(sample.x)
+
+    $color_rect.history = history
+    $color_rect.queue_redraw()
+
+#func fill_buffer():
+    #var phase = 0.0
+    #var increment = pulse_hz / sample_hz
+    #var frames_available = playback.get_frames_available()
+#
+    #for i in range(frames_available):
+        #playback.push_frame(Vector2.ONE * sin(phase * TAU))
+        #phase = fmod(phase + increment, 1.0)
+
+func set_tone(tone):
+    self.tone = tone
+"
+
+[sub_resource type="AudioStreamGenerator" id="AudioStreamGenerator_cokor"]
+buffer_length = 0.03
+
+[sub_resource type="GDScript" id="GDScript_adiss"]
+script/source = "extends ColorRect
+
+@export var history = []
+
+func _draw():
+    if len(history) < 2:
+        return
+    var points = []
+    var x = 0
+    #print(len(history))
+    for point in history:
+        points.append(Vector2(x, (point + 1) / 2.0 * size.y))
+        x += 1
+        if x >= size.x:
+            break
+    #print(points[len(points) - 1])
+    draw_polyline(points, Color('#FFFFFF'), 1.0, true)
+"
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_yem3j"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_y8oib"]
+bg_color = Color(0.133333, 0.133333, 0.133333, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ievnk"]
+bg_color = Color(0, 0, 0, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 1, 1, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wdlsp"]
+bg_color = Color(0.321569, 0.635294, 0.843137, 1)
+
+[sub_resource type="Theme" id="Theme_ljuvq"]
+Button/styles/focus = SubResource("StyleBoxEmpty_yem3j")
+Button/styles/hover = SubResource("StyleBoxFlat_y8oib")
+Button/styles/normal = SubResource("StyleBoxFlat_ievnk")
+Button/styles/pressed = SubResource("StyleBoxFlat_wdlsp")
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_l1hr3"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ejqn7"]
+bg_color = Color(0.866667, 0.866667, 0.866667, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pmhoy"]
+bg_color = Color(1, 1, 1, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0, 0, 0, 1)
+
+[sub_resource type="Theme" id="Theme_pvuiq"]
+Button/colors/font_color = Color(0, 0, 0, 1)
+Button/colors/font_focus_color = Color(0, 0, 0, 1)
+Button/colors/font_hover_color = Color(0, 0, 0, 1)
+Button/styles/disabled = null
+Button/styles/focus = SubResource("StyleBoxEmpty_l1hr3")
+Button/styles/hover = SubResource("StyleBoxFlat_ejqn7")
+Button/styles/normal = SubResource("StyleBoxFlat_pmhoy")
+Button/styles/pressed = SubResource("StyleBoxFlat_wdlsp")
+
+[node name="fm" type="Node"]
+script = SubResource("GDScript_hu4gv")
+
+[node name="graph_edit" type="GraphEdit" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+minimap_enabled = false
+show_menu = false
+show_zoom_buttons = false
+show_grid_buttons = false
+show_minimap_button = false
+show_arrange_button = false
+script = SubResource("GDScript_bux81")
+
+[node name="operator4" parent="graph_edit" instance=ExtResource("1_gacto")]
+layout_mode = 0
+offset_left = 147.0
+offset_top = 53.0
+offset_right = 447.0
+offset_bottom = 312.0
+position_offset = Vector2(147, 53)
+freq = 0.5
+amplitude = 0.033
+
+[node name="operator" parent="graph_edit" instance=ExtResource("1_gacto")]
+layout_mode = 0
+offset_left = 504.0
+offset_top = 59.0
+offset_right = 804.0
+offset_bottom = 318.0
+position_offset = Vector2(504, 59)
+freq = 0.5
+amplitude = 0.033
+
+[node name="operator2" parent="graph_edit" instance=ExtResource("1_gacto")]
+layout_mode = 0
+offset_left = 845.0
+offset_top = 53.0
+offset_right = 1145.0
+offset_bottom = 312.0
+position_offset = Vector2(845, 53)
+freq = 0.25
+amplitude = 0.09
+
+[node name="operator3" parent="graph_edit" instance=ExtResource("1_gacto")]
+layout_mode = 0
+offset_left = 1181.0
+offset_top = 60.0
+offset_right = 1481.0
+offset_bottom = 319.0
+position_offset = Vector2(1181, 60)
+
+[node name="output" type="GraphNode" parent="graph_edit"]
+layout_mode = 0
+offset_left = 1521.0
+offset_top = 67.0
+offset_right = 1813.0
+offset_bottom = 311.0
+mouse_filter = 1
+position_offset = Vector2(1521, 67)
+slot/0/left_enabled = true
+slot/0/left_type = 0
+slot/0/left_color = Color(1, 1, 1, 1)
+slot/0/left_icon = null
+slot/0/right_enabled = false
+slot/0/right_type = 0
+slot/0/right_color = Color(1, 1, 1, 1)
+slot/0/right_icon = null
+slot/0/draw_stylebox = true
+slot/1/left_enabled = false
+slot/1/left_type = 0
+slot/1/left_color = Color(1, 1, 1, 1)
+slot/1/left_icon = null
+slot/1/right_enabled = false
+slot/1/right_type = 0
+slot/1/right_color = Color(1, 1, 1, 1)
+slot/1/right_icon = null
+slot/1/draw_stylebox = true
+slot/2/left_enabled = false
+slot/2/left_type = 0
+slot/2/left_color = Color(1, 1, 1, 1)
+slot/2/left_icon = null
+slot/2/right_enabled = false
+slot/2/right_type = 0
+slot/2/right_color = Color(1, 1, 1, 1)
+slot/2/right_icon = null
+slot/2/draw_stylebox = true
+slot/3/left_enabled = false
+slot/3/left_type = 0
+slot/3/left_color = Color(1, 1, 1, 1)
+slot/3/left_icon = null
+slot/3/right_enabled = false
+slot/3/right_type = 0
+slot/3/right_color = Color(1, 1, 1, 1)
+slot/3/right_icon = null
+slot/3/draw_stylebox = true
+slot/4/left_enabled = false
+slot/4/left_type = 0
+slot/4/left_color = Color(1, 1, 1, 1)
+slot/4/left_icon = null
+slot/4/right_enabled = false
+slot/4/right_type = 0
+slot/4/right_color = Color(1, 1, 1, 1)
+slot/4/right_icon = null
+slot/4/draw_stylebox = true
+script = SubResource("GDScript_7wwkb")
+
+[node name="label" type="Label" parent="graph_edit/output"]
+layout_mode = 2
+text = "Вивід"
+
+[node name="audio_stream_player" type="AudioStreamPlayer" parent="graph_edit/output"]
+stream = SubResource("AudioStreamGenerator_cokor")
+
+[node name="color_rect" type="ColorRect" parent="graph_edit/output"]
+custom_minimum_size = Vector2(256, 96)
+layout_mode = 2
+color = Color(0, 0, 0, 1)
+script = SubResource("GDScript_adiss")
+
+[node name="upper" type="HBoxContainer" parent="graph_edit/output"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="none" type="Button" parent="graph_edit/output/upper"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = " "
+
+[node name="cs" type="Button" parent="graph_edit/output/upper"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 2.0
+theme = SubResource("Theme_ljuvq")
+text = " 2"
+
+[node name="ds" type="Button" parent="graph_edit/output/upper"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 2.0
+theme = SubResource("Theme_ljuvq")
+text = " 3"
+
+[node name="none2" type="Button" parent="graph_edit/output/upper"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 2.0
+text = " "
+
+[node name="fs" type="Button" parent="graph_edit/output/upper"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 2.0
+theme = SubResource("Theme_ljuvq")
+text = " 5"
+
+[node name="gs" type="Button" parent="graph_edit/output/upper"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 2.0
+theme = SubResource("Theme_ljuvq")
+text = " 6"
+
+[node name="as" type="Button" parent="graph_edit/output/upper"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 2.0
+theme = SubResource("Theme_ljuvq")
+text = " 7"
+
+[node name="none3" type="Button" parent="graph_edit/output/upper"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = " "
+
+[node name="lower" type="HBoxContainer" parent="graph_edit/output"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="c" type="Button" parent="graph_edit/output/lower"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = SubResource("Theme_pvuiq")
+text = "Q"
+
+[node name="d" type="Button" parent="graph_edit/output/lower"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = SubResource("Theme_pvuiq")
+text = " W"
+
+[node name="e" type="Button" parent="graph_edit/output/lower"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = SubResource("Theme_pvuiq")
+text = " E"
+
+[node name="f" type="Button" parent="graph_edit/output/lower"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = SubResource("Theme_pvuiq")
+text = " R"
+
+[node name="g" type="Button" parent="graph_edit/output/lower"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = SubResource("Theme_pvuiq")
+text = " T"
+
+[node name="a" type="Button" parent="graph_edit/output/lower"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = SubResource("Theme_pvuiq")
+text = " Y"
+
+[node name="b" type="Button" parent="graph_edit/output/lower"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = SubResource("Theme_pvuiq")
+text = " U"
+
+[node name="h_box_container2" type="HBoxContainer" parent="graph_edit/output"]
+layout_mode = 2

@@ -1,0 +1,200 @@
+[gd_scene load_steps=3 format=3 uid="uid://ba42mibtvb7ao"]
+
+[sub_resource type="GDScript" id="GDScript_lfot6"]
+script/source = "extends GraphNode
+
+@export var inputs: Array[Node] = []
+@export var freq: float = 1.0
+@export var amplitude: float = 1.0
+#@export var lfo: bool = false
+
+var history = []
+var last_t = null
+var last_tone = null
+var last_value = 0
+
+func _ready():
+    set_freq(freq)
+    $freq_box/h_slider.connect(\"value_changed\", set_freq)
+    set_amplitude(amplitude)
+    $amplitude_box/h_slider.connect(\"value_changed\", set_amplitude)
+    #set_lfo(lfo)
+    #$lfo.connect(\"pressed\", func(): set_lfo(not lfo))
+
+func set_freq(value):
+    freq = value
+    $freq_box/h_slider.value = value
+    $freq_box/value.text = '%.2f Гц' % value
+
+func set_amplitude(value):
+    amplitude = value
+    $amplitude_box/h_slider.value = value
+    $amplitude_box/value.text = '%.3f' % value
+
+#func set_lfo(value):
+    #lfo = value
+    #if value:
+        #$freq_box/h_slider.max_value = 20
+        #$amplitude_box/h_slider.max_value = 0.2
+    #else:
+        #$freq_box/h_slider.max_value = 1000
+        #$amplitude_box/h_slider.max_value = 1.0
+
+func read(t, tone):
+    if last_t == t and last_tone == tone:
+        return last_value
+
+    last_t = t
+    last_tone = tone
+
+    var res = []
+    var shift = 0.0
+    for input in inputs:
+        shift += input.read(t, tone).x
+    var value = Vector2.ONE * sin(t * PI * 2 * freq * tone + shift * PI * 2 * freq * tone) * amplitude
+    if len(history) >= self.size.x:
+        history.pop_front()
+    history.append(value.x)
+
+    last_value = value
+
+    return value
+
+func _process(delta):
+    $color_rect.history = history
+    $color_rect.queue_redraw()
+"
+
+[sub_resource type="GDScript" id="GDScript_c3mw7"]
+script/source = "extends ColorRect
+
+@export var history = []
+
+func _draw():
+    if len(history) < 2:
+        return
+    var points = []
+    var x = 0
+    #print(len(history))
+    for point in history:
+        points.append(Vector2(x, (point + 1) / 2.0 * size.y))
+        x += 1
+        if x >= size.x:
+            break
+    #print(points[len(points) - 1])
+    draw_polyline(points, Color('#FFFFFF'), 1.0, true)
+"
+
+[node name="operator" type="GraphNode"]
+offset_left = 20.0
+offset_top = 25.0
+offset_right = 312.0
+offset_bottom = 201.0
+mouse_filter = 1
+position_offset = Vector2(-2, 35)
+title = "Оператор"
+slot/0/left_enabled = true
+slot/0/left_type = 0
+slot/0/left_color = Color(0, 0.8, 0, 1)
+slot/0/left_icon = null
+slot/0/right_enabled = true
+slot/0/right_type = 0
+slot/0/right_color = Color(0, 0.8, 0, 1)
+slot/0/right_icon = null
+slot/0/draw_stylebox = true
+slot/1/left_enabled = false
+slot/1/left_type = 0
+slot/1/left_color = Color(1, 1, 1, 1)
+slot/1/left_icon = null
+slot/1/right_enabled = false
+slot/1/right_type = 0
+slot/1/right_color = Color(1, 1, 1, 1)
+slot/1/right_icon = null
+slot/1/draw_stylebox = true
+slot/2/left_enabled = false
+slot/2/left_type = 0
+slot/2/left_color = Color(1, 1, 1, 1)
+slot/2/left_icon = null
+slot/2/right_enabled = false
+slot/2/right_type = 0
+slot/2/right_color = Color(1, 1, 1, 1)
+slot/2/right_icon = null
+slot/2/draw_stylebox = true
+slot/3/left_enabled = false
+slot/3/left_type = 0
+slot/3/left_color = Color(1, 1, 1, 1)
+slot/3/left_icon = null
+slot/3/right_enabled = false
+slot/3/right_type = 0
+slot/3/right_color = Color(1, 1, 1, 1)
+slot/3/right_icon = null
+slot/3/draw_stylebox = true
+slot/4/left_enabled = false
+slot/4/left_type = 0
+slot/4/left_color = Color(1, 1, 1, 1)
+slot/4/left_icon = null
+slot/4/right_enabled = false
+slot/4/right_type = 0
+slot/4/right_color = Color(1, 1, 1, 1)
+slot/4/right_icon = null
+slot/4/draw_stylebox = true
+script = SubResource("GDScript_lfot6")
+
+[node name="label" type="Label" parent="."]
+layout_mode = 2
+text = "Візуалізація"
+
+[node name="color_rect" type="ColorRect" parent="."]
+custom_minimum_size = Vector2(256, 96)
+layout_mode = 2
+color = Color(0, 0, 0, 1)
+script = SubResource("GDScript_c3mw7")
+
+[node name="freq_box" type="HBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="label" type="Label" parent="freq_box"]
+layout_mode = 2
+size_flags_vertical = 1
+text = "Частота"
+
+[node name="h_slider" type="HSlider" parent="freq_box"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+size_flags_stretch_ratio = 2.0
+max_value = 10.0
+step = 0.25
+
+[node name="value" type="Label" parent="freq_box"]
+layout_mode = 2
+size_flags_vertical = 1
+text = "?"
+vertical_alignment = 1
+
+[node name="amplitude_box" type="HBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="label" type="Label" parent="amplitude_box"]
+layout_mode = 2
+size_flags_vertical = 1
+text = "Амплітуда"
+
+[node name="h_slider" type="HSlider" parent="amplitude_box"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+size_flags_stretch_ratio = 2.0
+max_value = 1.0
+step = 0.001
+
+[node name="value" type="Label" parent="amplitude_box"]
+layout_mode = 2
+size_flags_vertical = 1
+text = "?"
+vertical_alignment = 1
+
+[node name="lfo" type="CheckBox" parent="."]
+visible = false
+layout_mode = 2
+text = "Низькочастотний осцилятор"

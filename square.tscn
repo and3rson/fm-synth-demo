@@ -1,0 +1,72 @@
+[gd_scene load_steps=3 format=3 uid="uid://cg7yqovkjnvpv"]
+
+[sub_resource type="GDScript" id="GDScript_8pixk"]
+script/source = "extends Line2D
+
+var playback: AudioStreamGeneratorPlayback # Will hold the AudioStreamGeneratorPlayback.
+@onready var player: AudioStreamPlayer = $audio_stream_player
+@onready var sample_hz = player.stream.mix_rate
+var pulse_hz = 440.0 # The frequency of the sound wave.
+var t = 0.0
+
+@export var inputs: Array[Node] = []
+
+var history = []
+var file: FileAccess
+var buffer = []
+
+func _ready():
+    player.play()
+    playback = player.get_stream_playback()
+    file = FileAccess.open(\"res://vikings_intro.raw\", FileAccess.READ)
+    #file.seek_end()
+    #print(file.get_position())
+    #fill_buffer()
+
+func _process(delta: float) -> void:
+    var frames_available = playback.get_frames_available()
+    for i in range(frames_available):
+        #var buffer = file.get_buffer(frames_available)
+        var sample = file.get_8()
+        file.get_8()
+        #playback.push_buffer(buffer)
+        var value = (sample - 128) / 128.0 * 0.5
+        playback.push_frame(Vector2.ONE * value)
+        t += 1.0 / sample_hz
+        buffer.append(value)
+
+    var w = get_viewport().size.x
+    var h = get_viewport().size.y
+
+    clear_points()
+    var t_sec = Time.get_ticks_msec() / 1000.0 / 2.0
+    if t_sec < 1.0:
+        t_sec = 1.0
+    if t_sec > 4.0:
+        t_sec = 4.0
+    t_sec = 1.0
+    var part = buffer.slice(buffer.size() - 2048 / t_sec)
+    var count = 512
+    for i in range(count):
+        var value = part[len(part) / count * i]
+        if value > 0.05:
+            value = 0.75
+        elif value < -0.05:
+            value = -0.75
+        else:
+            value = 0.0
+        add_point(Vector2(w * (i + 1) / count, value / 2 * h + h / 2))
+"
+
+[sub_resource type="AudioStreamGenerator" id="AudioStreamGenerator_jdgep"]
+mix_rate = 11025.0
+buffer_length = 0.1
+
+[node name="square" type="Line2D"]
+width = 2.0
+default_color = Color(0, 0.666667, 0, 1)
+antialiased = true
+script = SubResource("GDScript_8pixk")
+
+[node name="audio_stream_player" type="AudioStreamPlayer" parent="."]
+stream = SubResource("AudioStreamGenerator_jdgep")
